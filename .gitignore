@@ -1,0 +1,18 @@
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Vercel
+.vercel
+
+# Secrets / local
+.env
+.env*.local
+
+# Python (agent lives in vound-outreach/, has its own ignores too)
+__pycache__/
+*.pyc
+.venv/

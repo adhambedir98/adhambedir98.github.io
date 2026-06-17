@@ -1,0 +1,8 @@
+vound-outreach
+.venv
+__pycache__
+*.pyc
+node_modules
+.next
+.git
+Hello world
