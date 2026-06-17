@@ -1,0 +1,16 @@
+# Secrets — never commit
+.env
+credentials/
+*token*.json
+
+# Local data with real contacts / internal notes — keep out of this public repo
+data/
+inbox/
+review/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.python-version

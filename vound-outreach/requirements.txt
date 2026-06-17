@@ -1,0 +1,11 @@
+# Vound outreach agent — Python 3.11+
+# Install:  python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+
+supabase>=2.4.0            # Supabase Python client (DB access via service-role key)
+python-dotenv>=1.0.0       # load secrets from .env
+
+# Gmail API (Step 7 reply reading + email backfill, Step 6 follow-up sending)
+google-api-python-client>=2.100.0
+google-auth>=2.23.0
+google-auth-oauthlib>=1.1.0
+google-auth-httplib2>=0.2.0
