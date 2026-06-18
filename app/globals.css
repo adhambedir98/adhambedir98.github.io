@@ -125,5 +125,13 @@ table.contacts tr:hover td { background: var(--panel); }
 .breakdown { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 20px; }
 .breakdown h3 { font-size: 15px; margin-bottom: 8px; }
 .breakdown table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.breakdown td { padding: 2px 0; }
+.breakdown td { padding: 3px 0; }
 .breakdown td.r { text-align: right; color: var(--gray); }
+.breakdown tr.clickrow { cursor: pointer; }
+.breakdown tr.clickrow:hover td { color: var(--color-secondary); }
+.hint { color: var(--gray); font-size: 12px; margin: 0 0 12px; }
+
+/* selected-geography detail panel */
+.geo-detail { border: 1px solid var(--line); padding: 18px 20px; margin-top: 18px; }
+.geo-detail-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+.geo-detail-head h3 { font-size: 18px; }
