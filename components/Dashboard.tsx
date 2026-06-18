@@ -1,18 +1,32 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { DAILY_SEND_CAP, OUTREACH_SENDER, TARGET_SOURCE } from "@/lib/config";
+import { STATUS_OPTIONS, statusColor, statusLabel } from "@/lib/statuses";
 import {
   assignVariants, computeMetrics, draft, pickTargets,
   type Contact, type Outreach, type Reply, type Variant,
 } from "@/lib/pipeline";
+import QueueCard from "@/components/QueueCard";
+
+const MapTab = dynamic(() => import("@/components/MapTab"), {
+  ssr: false,
+  loading: () => <p className="muted">Loading map…</p>,
+});
+
+function fmtDate(s: string | null): string {
+  if (!s) return "—";
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? "—" : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
 
 export default function Dashboard({ email }: { email: string }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [tab, setTab] = useState<"queue" | "contacts">("queue");
+  const [tab, setTab] = useState<"queue" | "contacts" | "map">("queue");
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [variants, setVariants] = useState<Variant[]>([]);
@@ -20,6 +34,9 @@ export default function Dashboard({ email }: { email: string }) {
   const [replies, setReplies] = useState<Reply[]>([]);
 
   const [industryFilter, setIndustryFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [locationFilter, setLocationFilter] = useState("all");
+  const [ownerFilter, setOwnerFilter] = useState("all");
   const [search, setSearch] = useState("");
 
   async function load() {
@@ -36,7 +53,6 @@ export default function Dashboard({ email }: { email: string }) {
     setReplies((r.data as Reply[]) || []);
     setLoading(false);
   }
-
   useEffect(() => { load(); }, []);
 
   const contactById = useMemo(
@@ -47,23 +63,34 @@ export default function Dashboard({ email }: { email: string }) {
     () => outreach.filter((o) => o.status === "queued" && o.channel === "hbs_directory" && o.is_first_touch),
     [outreach],
   );
-  const metrics = useMemo(
-    () => computeMetrics(outreach, replies, variants, contacts),
-    [outreach, replies, variants, contacts],
-  );
+  const metrics = useMemo(() => computeMetrics(outreach, replies, variants, contacts), [outreach, replies, variants, contacts]);
+
   const industries = useMemo(() => {
     const m: Record<string, number> = {};
     contacts.forEach((c) => (m[c.industry] = (m[c.industry] || 0) + 1));
     return m;
   }, [contacts]);
+  const industryList = useMemo(() => Object.keys(industries).sort(), [industries]);
+  const locations = useMemo(
+    () => Array.from(new Set(contacts.map((c) => c.location).filter(Boolean) as string[])).sort(),
+    [contacts],
+  );
+  const owners = useMemo(
+    () => Array.from(new Set(contacts.map((c) => c.owner).filter(Boolean) as string[])).sort(),
+    [contacts],
+  );
+
   const filteredContacts = useMemo(() => {
     const q = search.trim().toLowerCase();
     return contacts.filter(
       (c) =>
         (industryFilter === "all" || c.industry === industryFilter) &&
+        (statusFilter === "all" || c.status === statusFilter) &&
+        (locationFilter === "all" || c.location === locationFilter) &&
+        (ownerFilter === "all" || c.owner === ownerFilter) &&
         (!q || `${c.contact_name} ${c.company} ${c.role || ""}`.toLowerCase().includes(q)),
     );
-  }, [contacts, industryFilter, search]);
+  }, [contacts, industryFilter, statusFilter, locationFilter, ownerFilter, search]);
 
   async function generateQueue() {
     setBusy(true); setMsg(null);
@@ -103,16 +130,17 @@ export default function Dashboard({ email }: { email: string }) {
     setBusy(false);
   }
 
-  function copy(text: string) {
-    navigator.clipboard?.writeText(text).then(() => setMsg("Copied message to clipboard."));
+  async function saveEmail(id: string, subject: string, body: string) {
+    await supabase.from("outreach").update({ subject, body }).eq("id", id);
+    await load();
+    setMsg("Saved edits to the message.");
   }
 
   // metrics caveat
   const variantRows = Object.entries(metrics.perVariant).sort(([a], [b]) => a.localeCompare(b));
   const totalSent = variantRows.reduce((s, [, v]) => s + v.sent, 0);
   const totalReal = variantRows.reduce((s, [, v]) => s + v.real, 0);
-  const small = variantRows.length === 0 || totalSent < 60 ||
-    variantRows.some(([, v]) => v.sent < 30) || totalReal < 10;
+  const small = variantRows.length === 0 || totalSent < 60 || variantRows.some(([, v]) => v.sent < 30) || totalReal < 10;
 
   return (
     <main className="wrap">
@@ -124,56 +152,38 @@ export default function Dashboard({ email }: { email: string }) {
         <button className="ghost" onClick={() => supabase.auth.signOut()}>Sign out</button>
       </div>
 
-      {/* metrics */}
       <div className="metrics">
         <div className="col">
           <h3>Reply rate by variant</h3>
-          <table>
-            <tbody>
-              {variantRows.length === 0 && (
-                <tr><td className="muted">No first-touch sent yet.</td></tr>
-              )}
-              {variantRows.map(([label, v]) => (
-                <tr key={label}>
-                  <td>Variant {label}</td>
-                  <td className="r">{v.real}/{v.sent} = {v.sent ? ((v.real / v.sent) * 100).toFixed(1) : "0.0"}%</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <table><tbody>
+            {variantRows.length === 0 && <tr><td className="muted">No first-touch sent yet.</td></tr>}
+            {variantRows.map(([label, v]) => (
+              <tr key={label}><td>Variant {label}</td>
+                <td className="r">{v.real}/{v.sent} = {v.sent ? ((v.real / v.sent) * 100).toFixed(1) : "0.0"}%</td></tr>
+            ))}
+          </tbody></table>
           {variantRows.length > 0 && (
-            <p className="caveat">
-              {small
-                ? "Sample still small, do not call it yet. Aim for ~30+ sent per variant and 10+ real replies."
-                : "Sample is becoming meaningful; watch the gap but confirm it holds."}
-            </p>
+            <p className="caveat">{small
+              ? "Sample still small, do not call it yet. Aim for ~30+ sent per variant and 10+ real replies."
+              : "Sample is becoming meaningful; watch the gap but confirm it holds."}</p>
           )}
         </div>
         <div className="col">
           <h3>Reply rate by industry</h3>
-          <table>
-            <tbody>
-              {Object.entries(metrics.perIndustry).sort(([, a], [, b]) => b.sent - a.sent).map(([ind, v]) => (
-                <tr key={ind}>
-                  <td>{ind}</td>
-                  <td className="r">{v.real}/{v.sent} = {v.sent ? ((v.real / v.sent) * 100).toFixed(1) : "0.0"}%</td>
-                </tr>
-              ))}
-              {Object.keys(metrics.perIndustry).length === 0 && (
-                <tr><td className="muted">None yet.</td></tr>
-              )}
-            </tbody>
-          </table>
+          <table><tbody>
+            {Object.entries(metrics.perIndustry).sort(([, a], [, b]) => b.sent - a.sent).map(([ind, v]) => (
+              <tr key={ind}><td>{ind}</td>
+                <td className="r">{v.real}/{v.sent} = {v.sent ? ((v.real / v.sent) * 100).toFixed(1) : "0.0"}%</td></tr>
+            ))}
+            {Object.keys(metrics.perIndustry).length === 0 && <tr><td className="muted">None yet.</td></tr>}
+          </tbody></table>
         </div>
       </div>
 
       <div className="tabs">
-        <button className={`tab ${tab === "queue" ? "active" : ""}`} onClick={() => setTab("queue")}>
-          Today&apos;s queue ({queued.length})
-        </button>
-        <button className={`tab ${tab === "contacts" ? "active" : ""}`} onClick={() => setTab("contacts")}>
-          Contacts ({contacts.length})
-        </button>
+        <button className={`tab ${tab === "queue" ? "active" : ""}`} onClick={() => setTab("queue")}>Today&apos;s queue ({queued.length})</button>
+        <button className={`tab ${tab === "contacts" ? "active" : ""}`} onClick={() => setTab("contacts")}>Contacts ({contacts.length})</button>
+        <button className={`tab ${tab === "map" ? "active" : ""}`} onClick={() => setTab("map")}>Map</button>
       </div>
 
       {msg && <p className="caveat" style={{ marginBottom: 16 }}>{msg}</p>}
@@ -182,50 +192,13 @@ export default function Dashboard({ email }: { email: string }) {
       {!loading && tab === "queue" && (
         <>
           <div className="bar">
-            <span className="count">
-              {queued.length} first-touch queued. Nothing sends automatically — send each in the HBS
-              directory, then mark it sent.
-            </span>
-            <button onClick={generateQueue} disabled={busy}>
-              {busy ? "Working…" : `Generate ${DAILY_SEND_CAP}`}
-            </button>
+            <span className="count">{queued.length} first-touch queued. Edit any message, then send it yourself in the HBS directory and mark it sent.</span>
+            <button onClick={generateQueue} disabled={busy}>{busy ? "Working…" : `Generate ${DAILY_SEND_CAP}`}</button>
           </div>
-
-          {queued.length === 0 && (
-            <div className="card"><span className="notes">No messages queued. Click “Generate”.</span></div>
-          )}
-
+          {queued.length === 0 && <div className="card"><span className="notes">No messages queued. Click “Generate”.</span></div>}
           {queued.map((o) => {
             const c = contactById[o.contact_id] || ({} as Contact);
-            return (
-              <div className="card" key={o.id}>
-                <div className="card-head">
-                  <div>
-                    <h3>{c.contact_name}</h3>
-                    <div className="meta">{c.role || "—"} · {c.company} · {c.location || "—"}</div>
-                  </div>
-                  <div className="badges">
-                    <span className="badge">{c.industry}</span>
-                    {c.warm_cold && <span className="badge">{c.warm_cold}</span>}
-                    {c.tier && <span className="badge">{c.tier}</span>}
-                  </div>
-                </div>
-                <div className="field-label">Subject</div>
-                <div className="subject">{o.subject}</div>
-                <div className="field-label">Message — send this yourself in the HBS directory</div>
-                <div className="body">{o.body}</div>
-                {c.notes && (
-                  <>
-                    <div className="field-label">Internal notes (never sent)</div>
-                    <div className="notes">{c.notes}</div>
-                  </>
-                )}
-                <div className="card-actions">
-                  <button className="ghost" onClick={() => copy(`${o.subject}\n\n${o.body}`)}>Copy</button>
-                  <button onClick={() => markSent(o)} disabled={busy}>Mark sent</button>
-                </div>
-              </div>
-            );
+            return <QueueCard key={o.id} o={o} c={c} onSave={saveEmail} onMarkSent={markSent} busy={busy} />;
           })}
         </>
       )}
@@ -239,37 +212,52 @@ export default function Dashboard({ email }: { email: string }) {
                 <option key={ind} value={ind}>{ind} ({n})</option>
               ))}
             </select>
-            <input
-              placeholder="Search name / company / role"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{ flex: 1, minWidth: 200 }}
-            />
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="all">All statuses</option>
+              {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}
+            </select>
+            <select value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)}>
+              <option value="all">All owners</option>
+              {owners.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+            <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
+              <option value="all">All locations</option>
+              {locations.map((l) => <option key={l} value={l}>{l}</option>)}
+            </select>
+            <input placeholder="Search name / company / role" value={search}
+              onChange={(e) => setSearch(e.target.value)} style={{ flex: 1, minWidth: 180 }} />
+            <button className="ghost" onClick={() => { setIndustryFilter("all"); setStatusFilter("all"); setOwnerFilter("all"); setLocationFilter("all"); setSearch(""); }}>Clear</button>
             <span className="count">{filteredContacts.length} shown</span>
           </div>
-          <table className="contacts">
-            <thead>
-              <tr>
-                <th>Name</th><th>Company</th><th>Industry</th><th>Source</th><th>Warm</th><th>Tier</th><th>Status</th><th>Email</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredContacts.map((c) => (
-                <tr key={c.id}>
-                  <td>{c.contact_name}<div className="muted" style={{ fontSize: 12 }}>{c.role}</div></td>
-                  <td>{c.company}<div className="muted" style={{ fontSize: 12 }}>{c.location}</div></td>
-                  <td><span className="pill">{c.industry}</span></td>
-                  <td>{c.source}</td>
-                  <td>{c.warm_cold || "—"}</td>
-                  <td>{c.tier || "—"}</td>
-                  <td>{c.status}</td>
-                  <td>{c.email || <span className="muted">—</span>}</td>
+          <div className="tablewrap">
+            <table className="contacts">
+              <thead>
+                <tr>
+                  <th>Name</th><th>Company</th><th>Location</th><th>Industry</th><th>Owner</th>
+                  <th>Status</th><th>Added</th><th>Last contacted</th><th>Email</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredContacts.map((c) => (
+                  <tr key={c.id}>
+                    <td>{c.contact_name}<div className="muted" style={{ fontSize: 12 }}>{c.role}</div></td>
+                    <td>{c.company}</td>
+                    <td><button className="linklike" onClick={() => setLocationFilter(c.location || "all")}>{c.location || "—"}</button></td>
+                    <td><span className="pill">{c.industry}</span></td>
+                    <td>{c.owner ? <button className="linklike" onClick={() => setOwnerFilter(c.owner!)}>{c.owner}</button> : "—"}</td>
+                    <td><span className="statuspill" style={{ color: statusColor(c.status), borderColor: statusColor(c.status) }}>{statusLabel(c.status)}</span></td>
+                    <td className="muted">{fmtDate(c.created_at)}</td>
+                    <td className="muted">{fmtDate(c.last_contacted_at)}</td>
+                    <td>{c.email || <span className="muted">—</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
+
+      {!loading && tab === "map" && <MapTab contacts={contacts} industries={industryList} />}
     </main>
   );
 }
