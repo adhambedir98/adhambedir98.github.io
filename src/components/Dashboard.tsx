@@ -6,9 +6,11 @@ import type { Volunteer, WorkstreamKey, Status } from "@/lib/types";
 import { downloadCsv } from "@/lib/csv";
 import { EditableCell } from "./EditableCell";
 import { AddVolunteerModal } from "./AddVolunteerModal";
+import { TeamBoard } from "./TeamBoard";
 import { Wordmark } from "./Wordmark";
 
 type Toast = { id: number; message: string; tone: "ok" | "error" };
+type View = "board" | "table";
 
 export function Dashboard({ initial }: { initial: Volunteer[] }) {
   const [rows, setRows] = useState<Volunteer[]>(initial);
@@ -24,6 +26,7 @@ export function Dashboard({ initial }: { initial: Volunteer[] }) {
   const [recFilter, setRecFilter] = useState(false);
   const [followupOnly, setFollowupOnly] = useState(false);
 
+  const [view, setView] = useState<View>("board");
   const [modalOpen, setModalOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -162,6 +165,25 @@ export function Dashboard({ initial }: { initial: Volunteer[] }) {
       return true;
     });
   }, [rows, search, wsFilter, recFilter, statusFilter, followupOnly]);
+
+  // The board groups people into workstream columns itself, so it only honors
+  // the universal filters (search / recommended / status), not the per-
+  // workstream or follow-up filters used by the table.
+  const boardRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (
+        q &&
+        !`${r.name} ${r.email} ${r.program ?? ""}`.toLowerCase().includes(q)
+      )
+        return false;
+      if (recFilter && !r.recommended) return false;
+      if (statusFilter !== "all" && r.status !== statusFilter) return false;
+      return true;
+    });
+  }, [rows, search, recFilter, statusFilter]);
+
+  const shownCount = view === "board" ? boardRows.length : filtered.length;
 
   // ---- Email export -------------------------------------------------------
   async function copyEmails(key: WorkstreamKey, label: string) {
@@ -321,8 +343,9 @@ export function Dashboard({ initial }: { initial: Volunteer[] }) {
             )}
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-faint">
-              Showing {filtered.length} of {rows.length}
+            <ViewToggle value={view} onChange={setView} />
+            <span className="whitespace-nowrap text-xs text-faint">
+              Showing {shownCount} of {rows.length}
             </span>
             <button
               onClick={() =>
@@ -340,7 +363,19 @@ export function Dashboard({ initial }: { initial: Volunteer[] }) {
           </div>
         </section>
 
-        {/* Table */}
+        {/* Board view — group the team into workstream columns */}
+        {view === "board" && (
+          <section className="mt-4">
+            <TeamBoard
+              rows={boardRows}
+              onPatch={patchVolunteer}
+              onCopyEmails={copyEmails}
+            />
+          </section>
+        )}
+
+        {/* Table view — dense, fully editable grid */}
+        {view === "table" && (
         <section className="mt-4 overflow-hidden rounded-xl border border-border bg-surface shadow-card">
           <div className="scroll-thin overflow-x-auto">
             <table className="w-full min-w-[1180px] border-collapse text-sm">
@@ -384,12 +419,13 @@ export function Dashboard({ initial }: { initial: Volunteer[] }) {
             </table>
           </div>
         </section>
+        )}
 
         <p className="mt-4 text-xs text-faint">
-          Tip: paste{" "}
+          Share the{" "}
           <code className="rounded bg-surface-2 px-1 py-0.5 text-sand">/join</code>{" "}
-          into your WhatsApp group. New self-signups appear here highlighted as{" "}
-          <span className="text-crimson">New</span> for you to review.
+          link to collect sign-ups. New sign-ups are highlighted as{" "}
+          <span className="text-crimson">New</span> until you mark them reviewed.
         </p>
       </main>
 
@@ -573,6 +609,37 @@ function Row({
         </button>
       </td>
     </tr>
+  );
+}
+
+function ViewToggle({
+  value,
+  onChange,
+}: {
+  value: View;
+  onChange: (v: View) => void;
+}) {
+  const opts: { key: View; label: string }[] = [
+    { key: "board", label: "Board" },
+    { key: "table", label: "Table" },
+  ];
+  return (
+    <div className="inline-flex rounded-lg border border-border bg-surface-2 p-0.5">
+      {opts.map((o) => (
+        <button
+          key={o.key}
+          onClick={() => onChange(o.key)}
+          aria-pressed={value === o.key}
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+            value === o.key
+              ? "bg-crimson text-white"
+              : "text-muted hover:text-ink"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
   );
 }
 

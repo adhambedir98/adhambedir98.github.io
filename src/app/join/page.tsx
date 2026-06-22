@@ -11,12 +11,11 @@ export default function JoinPage() {
       <header className="mb-8">
         <Wordmark subtitle="Volunteers" />
         <h1 className="mt-6 text-2xl font-semibold leading-tight tracking-tight text-ink sm:text-3xl">
-          Help bring the Harvard Reception to Davos 2027
+          Volunteer for the Harvard Reception at Davos 2027
         </h1>
         <p className="mt-3 text-[15px] leading-relaxed text-muted">
-          We&apos;re assembling a team for the Harvard Reception at the World
-          Economic Forum. Tell us where you&apos;d like to help and we&apos;ll be
-          in touch. Takes under a minute.
+          Tell us where you&apos;d like to help with the Harvard Reception at the
+          World Economic Forum. The organizing team will follow up.
         </p>
       </header>
 

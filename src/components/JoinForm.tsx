@@ -159,7 +159,7 @@ export function JoinForm() {
           Which workstreams can you help with?
         </legend>
         <p className="mb-3 text-[13px] text-muted">
-          Pick any that fit — most people choose one or two.
+          Select all that apply.
         </p>
         <div className="space-y-3">
           {WORKSTREAMS.map((w) => {
@@ -193,7 +193,7 @@ export function JoinForm() {
         </div>
         {selectedCount === 0 && (
           <p className="mt-2 text-[13px] text-faint">
-            Not sure yet? You can still sign up and we&apos;ll help you find a fit.
+            Optional — leave blank if you&apos;re not sure yet.
           </p>
         )}
       </fieldset>
@@ -220,11 +220,11 @@ export function JoinForm() {
       )}
 
       <button type="submit" disabled={loading} className="btn-primary w-full py-3.5 text-base">
-        {loading ? "Submitting…" : "Count me in"}
+        {loading ? "Submitting…" : "Sign up"}
       </button>
 
       <p className="text-center text-xs text-faint">
-        Your details are shared only with the Davos 2027 organizing team.
+        Your details are visible only to the organizing team.
       </p>
     </form>
   );
@@ -295,21 +295,24 @@ function Confirmation({
         </svg>
       </div>
       <h2 className="mt-5 text-xl font-semibold text-ink">
-        Thanks, {firstName} — you&apos;re signed up.
+        You&apos;re signed up, {firstName}.
       </h2>
       <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-muted">
         {list ? (
           <>
-            You&apos;re on the list to help with <strong className="text-sand">{list}</strong>.
+            We&apos;ve noted that you&apos;d like to help with{" "}
+            <strong className="text-sand">{list}</strong>. The organizing team
+            will follow up.
           </>
         ) : (
-          <>You&apos;re on the list. We&apos;ll help you find the right workstream.</>
-        )}{" "}
-        We&apos;ll be in touch about Davos 2027.
+          <>
+            The organizing team will follow up about where you can help.
+          </>
+        )}
       </p>
       <p className="mt-6 text-[13px] text-faint">
-        Signed up with the wrong details or want to change your workstreams? Just
-        submit the form again with the same email — it&apos;ll update your entry.
+        Need to change something? Submit the form again with the same email to
+        update your entry.
       </p>
     </div>
   );
