@@ -19,7 +19,11 @@ const COLUMNS: (keyof Volunteer)[] = [
 ];
 
 function escapeCell(value: unknown): string {
-  const s = value === null || value === undefined ? "" : String(value);
+  let s = value === null || value === undefined ? "" : String(value);
+  // Neutralize spreadsheet formula injection: a leading =, +, -, @, tab, or CR
+  // would make Excel/Sheets evaluate attacker-controlled input (the outreach
+  // fields come from a public form). A leading apostrophe forces text.
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
   // Quote if it contains comma, quote, semicolon, or newline.
   return /[",;\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }

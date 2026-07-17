@@ -16,37 +16,42 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  */
 export async function GET(req: Request) {
   const supabase = getSupabaseAdmin();
+  const email = normalizeEmail(new URL(req.url).searchParams.get("email"));
 
-  if (await isAuthenticated()) {
+  // Scoped personal view (used by /sponsorship). This branch wins even for a
+  // logged-in admin: an organizer opening the public page must see only THEIR
+  // entries, never the whole database rendered as "your outreach".
+  if (email) {
+    if (!isValidEmail(email)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const { data, error } = await supabase
       .from("outreach")
       .select("*")
       .eq("track", "sponsorship")
+      .eq("submitter_email", email)
+      .order("outreach_date", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false });
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json(
+        { error: "Something went wrong. Please try again." },
+        { status: 500 }
+      );
     }
     return NextResponse.json({ entries: data ?? [] });
   }
 
-  const email = normalizeEmail(new URL(req.url).searchParams.get("email"));
-  if (!isValidEmail(email)) {
+  // Centralized view (no email param) — admins only.
+  if (!(await isAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
   const { data, error } = await supabase
     .from("outreach")
     .select("*")
     .eq("track", "sponsorship")
-    .eq("submitter_email", email)
-    .order("outreach_date", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false });
-
   if (error) {
-    return NextResponse.json(
-      { error: "Something went wrong. Please try again." },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
   return NextResponse.json({ entries: data ?? [] });
 }

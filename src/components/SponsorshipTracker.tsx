@@ -225,7 +225,6 @@ export function SponsorshipTracker() {
       )
     )
       return;
-    const before = entries;
     setEntries((curr) => curr.filter((x) => x.id !== entry.id));
     if (editingId === entry.id) cancelEdit();
     try {
@@ -236,7 +235,11 @@ export function SponsorshipTracker() {
       if (!res.ok) throw new Error();
       flash("Entry removed.");
     } catch {
-      setEntries(before);
+      // Restore only this row — a whole-list snapshot would resurrect other
+      // rows deleted while this request was in flight.
+      setEntries((curr) =>
+        curr.some((x) => x.id === entry.id) ? curr : [entry, ...curr]
+      );
       setError("Couldn't delete that entry. Please try again.");
     }
   }

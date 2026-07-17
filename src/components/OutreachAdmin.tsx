@@ -34,6 +34,12 @@ export function OutreachAdmin({ initial }: { initial: OutreachEntry[] }) {
   const [refreshing, setRefreshing] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
+  // Bumped on every successful local mutation. A background refresh only
+  // applies its (possibly stale) response if no mutation landed after the
+  // fetch was dispatched — otherwise a slow poll would visibly revert a
+  // just-saved edit until the next poll.
+  const mutationVersion = useRef(0);
+
   const notify = useCallback((message: string, tone: "ok" | "error" = "ok") => {
     const id = Date.now() + Math.random();
     setToasts((t) => [...t, { id, message, tone }]);
@@ -43,11 +49,14 @@ export function OutreachAdmin({ initial }: { initial: OutreachEntry[] }) {
   const refresh = useCallback(
     async (silent = true) => {
       if (!silent) setRefreshing(true);
+      const startVersion = mutationVersion.current;
       try {
         const res = await fetch("/api/outreach", { cache: "no-store" });
         if (!res.ok) throw new Error();
         const { entries } = await res.json();
-        setRows(entries as OutreachEntry[]);
+        if (mutationVersion.current === startVersion) {
+          setRows(entries as OutreachEntry[]);
+        }
         if (!silent) notify("Refreshed.");
       } catch {
         if (!silent) notify("Couldn't refresh.", "error");
@@ -83,6 +92,7 @@ export function OutreachAdmin({ initial }: { initial: OutreachEntry[] }) {
           throw new Error(d.error || "Save failed.");
         }
         const { entry } = await res.json();
+        mutationVersion.current += 1;
         setRows((curr) =>
           curr.map((r) => (r.id === id ? (entry as OutreachEntry) : r))
         );
@@ -105,16 +115,20 @@ export function OutreachAdmin({ initial }: { initial: OutreachEntry[] }) {
         )
       )
         return;
-      const before = rowsRef.current;
       setRows((curr) => curr.filter((r) => r.id !== entry.id));
       try {
         const res = await fetch(`/api/outreach/${entry.id}`, {
           method: "DELETE",
         });
         if (!res.ok) throw new Error();
+        mutationVersion.current += 1;
         notify("Entry deleted.");
       } catch {
-        setRows(before);
+        // Restore only the row this delete removed — a whole-list snapshot
+        // would resurrect rows deleted (or overwrite rows edited) meanwhile.
+        setRows((curr) =>
+          curr.some((r) => r.id === entry.id) ? curr : [entry, ...curr]
+        );
         notify("Couldn't delete.", "error");
       }
     },
@@ -349,16 +363,11 @@ export function OutreachAdmin({ initial }: { initial: OutreachEntry[] }) {
                         />
                       </td>
                       <td className="px-1.5 py-2">
-                        <input
-                          type="date"
-                          value={r.outreach_date ?? ""}
-                          onChange={(e) =>
-                            patchEntry(r.id, {
-                              outreach_date: e.target.value || null,
-                            })
+                        <DateCell
+                          value={r.outreach_date}
+                          onSave={(next) =>
+                            patchEntry(r.id, { outreach_date: next })
                           }
-                          aria-label="Outreach date"
-                          className="w-full rounded-md border border-transparent bg-transparent px-2 py-1.5 text-sm text-ink outline-none transition hover:border-border focus:border-sand/60 focus:bg-surface-2"
                         />
                       </td>
                       <td className="px-1.5 py-2">
@@ -426,6 +435,65 @@ export function OutreachAdmin({ initial }: { initial: OutreachEntry[] }) {
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * Date picker that commits ONCE on blur (like EditableCell). A raw onChange →
+ * PATCH would fire on every keystroke segment, persisting garbage intermediate
+ * dates (typing "2026" fires 0002, 0020, 0202…) and racing in-flight requests.
+ * While focused it ignores external row updates so polls can't clobber typing.
+ */
+function DateCell({
+  value,
+  onSave,
+}: {
+  value: string | null;
+  onSave: (next: string | null) => Promise<boolean>;
+}) {
+  const [draft, setDraft] = useState(value ?? "");
+  const [saving, setSaving] = useState(false);
+  const focusedRef = useRef(false);
+
+  useEffect(() => {
+    if (!focusedRef.current) setDraft(value ?? "");
+  }, [value]);
+
+  async function commit() {
+    focusedRef.current = false;
+    const next = draft || null;
+    if (next === (value ?? null)) {
+      setDraft(value ?? "");
+      return;
+    }
+    setSaving(true);
+    const ok = await onSave(next);
+    setSaving(false);
+    if (!ok) setDraft(value ?? "");
+  }
+
+  return (
+    <input
+      type="date"
+      value={draft}
+      disabled={saving}
+      onFocus={() => {
+        focusedRef.current = true;
+      }}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        if (e.key === "Escape") {
+          setDraft(value ?? "");
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      aria-label="Outreach date"
+      className={`w-full rounded-md border border-transparent bg-transparent px-2 py-1.5 text-sm text-ink outline-none transition hover:border-border focus:border-sand/60 focus:bg-surface-2 ${
+        saving ? "opacity-60" : ""
+      }`}
+    />
   );
 }
 

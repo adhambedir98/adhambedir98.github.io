@@ -28,6 +28,11 @@ export function Dashboard({ initial }: { initial: Volunteer[] }) {
   const [refreshing, setRefreshing] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
+  // Bumped on every successful local mutation; a background refresh only
+  // applies its response if no mutation landed after the fetch started, so a
+  // slow poll can never visibly revert a just-saved edit.
+  const mutationVersion = useRef(0);
+
   const notify = useCallback((message: string, tone: "ok" | "error" = "ok") => {
     const id = Date.now() + Math.random();
     setToasts((t) => [...t, { id, message, tone }]);
@@ -38,11 +43,14 @@ export function Dashboard({ initial }: { initial: Volunteer[] }) {
   const refresh = useCallback(
     async (silent = true) => {
       if (!silent) setRefreshing(true);
+      const startVersion = mutationVersion.current;
       try {
         const res = await fetch("/api/volunteers", { cache: "no-store" });
         if (!res.ok) throw new Error();
         const { volunteers } = await res.json();
-        setRows(volunteers as Volunteer[]);
+        if (mutationVersion.current === startVersion) {
+          setRows(volunteers as Volunteer[]);
+        }
         if (!silent) notify("Refreshed.");
       } catch {
         if (!silent) notify("Couldn't refresh.", "error");
@@ -82,6 +90,7 @@ export function Dashboard({ initial }: { initial: Volunteer[] }) {
           throw new Error(d.error || "Save failed.");
         }
         const { volunteer } = await res.json();
+        mutationVersion.current += 1;
         setRows((curr) =>
           curr.map((r) => (r.id === id ? (volunteer as Volunteer) : r))
         );
@@ -104,16 +113,20 @@ export function Dashboard({ initial }: { initial: Volunteer[] }) {
         )
       )
         return;
-      const before = rowsRef.current;
       setRows((curr) => curr.filter((r) => r.id !== v.id));
       try {
         const res = await fetch(`/api/volunteers/${v.id}`, {
           method: "DELETE",
         });
         if (!res.ok) throw new Error();
+        mutationVersion.current += 1;
         notify(`Deleted ${v.name}.`);
       } catch {
-        setRows(before);
+        // Restore only this row — a whole-list snapshot would resurrect rows
+        // deleted (or clobber rows edited) while this request was in flight.
+        setRows((curr) =>
+          curr.some((r) => r.id === v.id) ? curr : [v, ...curr]
+        );
         notify("Couldn't delete.", "error");
       }
     },
@@ -400,6 +413,7 @@ export function Dashboard({ initial }: { initial: Volunteer[] }) {
         <AddVolunteerModal
           onClose={() => setModalOpen(false)}
           onCreated={(v) => {
+            mutationVersion.current += 1;
             setRows((curr) => [v, ...curr]);
             setModalOpen(false);
             notify(`Added ${v.name}.`);
