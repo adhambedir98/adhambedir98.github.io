@@ -25,3 +25,20 @@ export interface Volunteer {
   created_at: string;
   updated_at: string;
 }
+
+export type OutreachTrack = "sponsorship" | "vip_outreach";
+
+export interface OutreachEntry {
+  id: string;
+  track: OutreachTrack;
+  submitter_name: string;
+  submitter_email: string;
+  company: string;
+  contact_name: string;
+  contact_title: string | null;
+  harvard_affiliation: string | null;
+  outreach_date: string | null; // YYYY-MM-DD
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}

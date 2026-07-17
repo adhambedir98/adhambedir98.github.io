@@ -33,9 +33,7 @@ export function volunteersToCsv(rows: Volunteer[]): string {
   return [header, ...lines].join("\r\n");
 }
 
-/** Trigger a CSV download in the browser. */
-export function downloadCsv(rows: Volunteer[], filename: string): void {
-  const csv = volunteersToCsv(rows);
+function triggerDownload(csv: string, filename: string): void {
   const blob = new Blob(["﻿" + csv], {
     type: "text/csv;charset=utf-8;",
   });
@@ -47,4 +45,22 @@ export function downloadCsv(rows: Volunteer[], filename: string): void {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+/** Trigger a CSV download of the volunteers table in the browser. */
+export function downloadCsv(rows: Volunteer[], filename: string): void {
+  triggerDownload(volunteersToCsv(rows), filename);
+}
+
+/** Generic CSV download for any table (used by the outreach tracker). */
+export function downloadTableCsv(
+  columns: string[],
+  rows: Record<string, unknown>[],
+  filename: string
+): void {
+  const header = columns.join(",");
+  const lines = rows.map((row) =>
+    columns.map((col) => escapeCell(row[col])).join(",")
+  );
+  triggerDownload([header, ...lines].join("\r\n"), filename);
 }

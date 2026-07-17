@@ -1,8 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "./lib/auth";
 
-// Routes that never require authentication.
-const PUBLIC_PATHS = ["/login", "/join", "/api/login", "/api/join"];
+// Routes that never require authentication. /api/outreach enforces its own
+// scoping in the handler (admin cookie -> all rows; otherwise only the
+// caller's own entries by submitter email).
+const PUBLIC_PATHS = [
+  "/login",
+  "/join",
+  "/sponsorship",
+  "/api/login",
+  "/api/join",
+  "/api/outreach",
+];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some(

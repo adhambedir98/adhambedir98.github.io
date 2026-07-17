@@ -207,6 +207,9 @@ export function Dashboard({ initial }: { initial: Volunteer[] }) {
         <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <Wordmark subtitle="Volunteer Tracker" />
           <div className="flex items-center gap-2">
+            <a href="/outreach" className="btn-subtle px-3 py-2">
+              Outreach →
+            </a>
             <button
               onClick={() => refresh(false)}
               className="btn-ghost px-3 py-2"

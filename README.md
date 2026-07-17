@@ -176,6 +176,34 @@ row updates in place, its notes/recommended stay intact, and it re-flags as New.
 
 ---
 
+## Sponsorship outreach tracker
+
+A second, self-serve tracker for the **Sponsorship** workstream:
+
+- **`/sponsorship`** — public link to share with the sponsorship team. Each
+  volunteer identifies themselves once (name + email, remembered on their
+  device), then logs every person they reach out to — company, name, title,
+  Harvard affiliation, date, notes — and sees / edits / deletes **their own**
+  list.
+- **`/outreach`** — the centralized admin view (behind the same password gate):
+  every entry from every volunteer, with search, a per-volunteer filter,
+  **duplicate-company flags** (so no sponsor gets double-contacted), inline
+  editing, and CSV export.
+
+Setup: run `supabase/migrations/0002_outreach.sql` in the Supabase SQL Editor
+(same as step 4 above). The table is RLS-locked like `volunteers`; all access is
+server-side.
+
+Trust model note: `/sponsorship` identifies volunteers by self-reported email
+(no password), which is appropriate for an internal team link — anyone with the
+link who knows a teammate's email could view that teammate's entries. Admin
+edits/deletes of arbitrary entries still require the password-gated session.
+
+The schema already supports a future VIP-outreach tracker via its `track`
+column — no migration needed when that UI is added.
+
+---
+
 ## Security model
 
 - **Row Level Security is ON** for `volunteers` with **no policies** for the
